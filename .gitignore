@@ -12,7 +12,7 @@ report.json
 
 # Compiler
 prodg*
-tools/cc/
+tools/
 usr/
 
 # Splat
@@ -84,3 +84,4 @@ __pycache__/
 .vscode
 temp/
 *.diff
+build/

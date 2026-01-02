@@ -22,24 +22,24 @@ ROOT = Path(__file__).parent.resolve()
 TOOLS_DIR = ROOT / "tools"
 OUTDIR = "out"
 
-YAML_FILE = Path("config/sly1.yaml")
-BASENAME = "SCUS_971.98"
-LD_PATH = f"{BASENAME}.ld"
+YAML_FILE = Path("config/sonic.yaml")
+BASENAME = "SLUS_216.42"
+LD_PATH = f"{BASENAME}.splat.ld"
 ELF_PATH = f"{OUTDIR}/{BASENAME}"
 MAP_PATH = f"{OUTDIR}/{BASENAME}.map"
 PRE_ELF_PATH = f"{OUTDIR}/{BASENAME}.elf"
 
-COMMON_INCLUDES = "-Iinclude -isystem include/sdk/ee -isystem include/gcc"
+COMMON_INCLUDES = "-i include -i include/sdk/ee -i include/gcc"
 
-CC_DIR = f"{TOOLS_DIR}/cc/bin"
-COMMON_COMPILE_FLAGS = f"-x c++ -B{TOOLS_DIR}/cc/lib/gcc-lib/ee/2.95.2/ -O2 -G0 -ffast-math"
+CC_DIR = f"{TOOLS_DIR}/compilers/PS2/mwcps2-3.0.1b145-050209"
+COMMON_COMPILE_FLAGS = f"-lang=c++ -O3"
 
 WINE = "wine"
 
-GAME_GCC_CMD = f"{CC_DIR}/ee-gcc.exe -c {COMMON_INCLUDES} {COMMON_COMPILE_FLAGS} $in"
-COMPILE_CMD = f"{GAME_GCC_CMD}"
+GAME_MWCC_CMD = f"{CC_DIR}/mwccps2 -c {COMMON_INCLUDES} {COMMON_COMPILE_FLAGS} $in"
+COMPILE_CMD = f"{GAME_MWCC_CMD}"
 if sys.platform == "linux" or sys.platform == "linux2":
-    COMPILE_CMD = f"{WINE} {GAME_GCC_CMD}"
+    COMPILE_CMD = f"{WINE} {GAME_MWCC_CMD}"
 
 CATEGORY_MAP = {
     "P2": "Engine",
@@ -78,12 +78,12 @@ def write_permuter_settings():
     with open("permuter_settings.toml", "w", encoding="utf-8") as f:
         f.write(f"""compiler_command = "{COMPILE_CMD} -D__GNUC__"
 assembler_command = "mips-linux-gnu-as -march=r5900 -mabi=eabi -Iinclude"
-compiler_type = "gcc"
+compiler_type = "mwcc"
 
 [preserve_macros]
 
 [decompme.compilers]
-"tools/build/cc/gcc/gcc" = "ee-gcc2.96"
+"tools/build/cc/mwcc/mwccps2" = "mwcps2-3.0.1b145"
 """)
 
 #MARK: Build
@@ -223,25 +223,33 @@ def build_stuff(linker_entries: List[LinkerEntry], skip_checksum=False, objects_
 
     #MARK: Rules
     cross = "mips-linux-gnu-"
+    binutils_prefix = TOOLS_DIR / "binutils"
+    
+    # Use custom binutils if available, otherwise use system binutils
+    if (binutils_prefix / f"{cross}as").exists() or (binutils_prefix / f"{cross}as.exe").exists():
+        cross_path = f"{binutils_prefix}/{cross}"
+    else:
+        cross_path = cross
 
     ld_args = "-EL -T config/undefined_syms_auto.txt -T config/undefined_funcs_auto.txt -Map $mapfile -T $in -o $out"
 
     ninja.rule(
         "as",
         description="as $in",
-        command=f"cpp {COMMON_INCLUDES} $in -o  - | {cross}as -no-pad-sections -EL -march=5900 -mabi=eabi -Iinclude -o $out",
+        command=f"cpp {COMMON_INCLUDES} $in -o  - | {cross_path}as -no-pad-sections -EL -march=5900 -mabi=eabi -Iinclude -o $out",
     )
 
     ninja.rule(
         "cc",
         description="cc $in",
-        command=f"{COMPILE_CMD} $cflags -o $out && {cross}strip $out -N dummy-symbol-name",
+        # command=f"{COMPILE_CMD} $cflags -o $out && {cross_path}strip $out -N dummy-symbol-name",
+        command=f"{COMPILE_CMD} $cflags -o $out",
     )
 
     ninja.rule(
         "ld",
         description="link $out",
-        command=f"{cross}ld {ld_args}",
+        command=f"{cross_path}ld {ld_args}",
     )
 
     ninja.rule(
@@ -253,7 +261,7 @@ def build_stuff(linker_entries: List[LinkerEntry], skip_checksum=False, objects_
     ninja.rule(
         "elf",
         description="elf $out",
-        command=f"{cross}objcopy $in $out -O binary",
+        command=f"{cross_path}objcopy $in $out -O binary",
     )
 
     #MARK: Build
